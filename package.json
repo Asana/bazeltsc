@@ -1,5 +1,5 @@
 {
-  "name": "ftsc",
+  "name": "bazel-tsc",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -9,12 +9,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "google-protobuf": "^3.2.0",
-    "protobufjs": "^6.7.3",
-    "typescript": "file:../TypeScript"
+    "google-protobuf": "^3.2.0"
+  },
+  "peerDependencies": {
+    "typescript": "1.x || 2.x"
   },
   "devDependencies": {
     "@types/long": "^3.0.31",
-    "@types/node": "^7.0.12"
+    "@types/node": "^7.0.12",
+    "typescript": "^2.3.0"
   }
 }

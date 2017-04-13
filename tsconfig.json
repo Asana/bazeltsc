@@ -3,7 +3,12 @@
         "rootDir": "src",
         "outDir": "target",
         "types": ["node", "long"],
-        "allowJs": true
+        "allowJs": true,
+        "sourceMap": true,
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noUnusedLocals": true
     },
     "include": [
         "src/**.ts",

@@ -1,0 +1,42 @@
+{
+    // Use IntelliSense to learn about possible Node.js debug attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch Program",
+            "program": "${workspaceRoot}/target/bazel-tsc.js",
+            "args": [ "--outFile", "x.js", "x.ts", "y.ts" ],
+            "outFiles": ["${workspaceRoot}/target/*"]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch with --debug",
+            "program": "${workspaceRoot}/target/bazel-tsc.js",
+            "args": [ "--debug" ],
+            "outFiles": ["${workspaceRoot}/target/*"],
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch with --persistent_worker",
+            "program": "${workspaceRoot}/target/bazel-tsc.js",
+            "args": [ "--persistent_worker" ],
+            "outFiles": ["${workspaceRoot}/target/*"],
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "node",
+            "request": "attach",
+            "name": "Attach to Port",
+            "address": "localhost",
+            "port": 5858,
+            "outFiles": ["${workspaceRoot}/target/*"]
+        }
+    ]
+}
