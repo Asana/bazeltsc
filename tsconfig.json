@@ -1,17 +1,16 @@
 {
-    "compilerOptions": {
-        "rootDir": "src",
-        "outDir": "target",
-        "types": ["node", "long"],
-        "allowJs": true,
-        "sourceMap": true,
-        "noImplicitAny": true,
-        "noImplicitReturns": true,
-        "noImplicitThis": true,
-        "noUnusedLocals": true
-    },
-    "include": [
-        "src/**.ts",
-        "src/**.js"
-    ]
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib",
+    "types": ["node"],
+    "allowJs": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": true
+  },
+  "include": [
+    "src/**.ts",
+    "src/**.js"
+  ]
 }

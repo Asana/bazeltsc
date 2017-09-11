@@ -1,22 +1,40 @@
 {
-  "name": "bazel-tsc",
+  "name": "bazeltsc",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A Bazel persistent worker for compiling TypeScript",
+  "keywords": [
+    "compiler",
+    "tsc",
+    "javasript"
+  ],
+  "engines": {
+    "npm": ">=4.0"
+  },
+  "bin": {
+    "bazeltsc": "bin/bazeltsc"
+  },
+  "files": [
+    "bin/*",
+    "dist/*"
+  ],
+  "repository": "Asana/bazel-tsc",
   "scripts": {
+    "build": "./build.sh",
+    "prepare": "npm run build",
+    "clean": "rm -rf node_modules lib dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "google-protobuf": "^3.2.0"
-  },
+  "author": "Mike Morearty (https://github.com/mmorearty)",
+  "license": "BSD-3-Clause",
   "peerDependencies": {
-    "typescript": "1.x || 2.x"
+    "typescript": ">= 2.0.2"
   },
   "devDependencies": {
-    "@types/long": "^3.0.31",
+    "@types/google-protobuf": "^3.2.7",
     "@types/node": "^7.0.12",
-    "typescript": "^2.3.0"
+    "google-protobuf": "^3.2.7",
+    "ts-protoc-gen": "^0.4.0",
+    "typescript": "^2.5.3",
+    "webpack": "^3.6.0"
   }
 }

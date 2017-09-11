@@ -1,11 +1,15 @@
-// bazel-tsc: Bazel TypeScript Compiler.
+// bazeltsc: Bazel TypeScript Compiler.
 
-import * as fs from "fs";
-import * as ts from "typescript";
+// built-in node packages
+import * as path from "path";
 import * as readline from "readline";
 
-const protobuf = require("google-protobuf");
-const worker = require("./worker_protocol_pb");
+// imported npm packages
+import * as ts from "typescript";
+import * as protobuf from "google-protobuf";
+
+// imports of our own code
+import * as worker from "../lib/worker_protocol_pb";
 
 let parsedCommandLine: ts.ParsedCommandLine;
 
@@ -13,17 +17,15 @@ const languageServiceHost: ts.LanguageServiceHost = {
     getCompilationSettings: (): ts.CompilerOptions => parsedCommandLine.options,
     getNewLine: () => ts.sys.newLine,
     getScriptFileNames: (): string[] => parsedCommandLine.fileNames,
-    getScriptVersion: (fileName: string): string => { // TODO: should this by dynamic or not?
+    getScriptVersion: (fileName: string): string => {
         // If the file's size or modified-timestamp changed, it's a different version.
-        const stats = fs.statSync(fileName);
-        const version = stats.size + ":" + stats.mtime.getTime();
-        return version;
+        return ts.sys.getFileSize(fileName) + ":" + ts.sys.getModifiedTime(fileName).getTime();
     },
     getScriptSnapshot: (fileName: string): ts.IScriptSnapshot | undefined => {
-        if (!fs.existsSync(fileName)) {
+        if (!ts.sys.fileExists(fileName)) {
             return undefined;
         }
-        let text = fs.readFileSync(fileName, "utf-8");
+        let text = ts.sys.readFile(fileName);
         return {
             getText: (start: number, end: number) => {
                 if (start === 0 && end === text.length) { // optimization
@@ -65,56 +67,126 @@ const languageServiceHost: ts.LanguageServiceHost = {
             dispose: () => { text = ""; }
         };
     },
-    getCurrentDirectory: process.cwd,
+    getCurrentDirectory: ts.sys.getCurrentDirectory,
     getDefaultLibFileName: ts.getDefaultLibFilePath
 };
 
 const languageService: ts.LanguageService = ts.createLanguageService(languageServiceHost);
 
 const formatDiagnosticsHost: ts.FormatDiagnosticsHost = {
-    getCurrentDirectory: process.cwd,
+    getCurrentDirectory: ts.sys.getCurrentDirectory,
     getCanonicalFileName: (fileName: string) => fileName,
     getNewLine: () => ts.sys.newLine
 };
 
-function compile(args: string[]): { exitCode: number, output: string } {
-    // const startTime = process.hrtime();
+function fileNotFoundDiagnostic(filename: string): ts.Diagnostic {
+    return {
+        file: undefined,
+        start: undefined,
+        length: undefined,
+        messageText: `File '${filename}' not found.`, // ugh, hard-coded
+        category: ts.DiagnosticCategory.Error,
+        code: 6053 // ugh, hard-coded
+    };
+}
 
+// Returns an array of zero or more diagnostic messages, one for each file that does not exist.
+// I would really prefer to let the TypeScript compiler take care of this, but I couldn't find a way.
+function ensureRootFilesExist(filenames: string[]): ts.Diagnostic[] {
+    return filenames
+        .filter(filename => !ts.sys.fileExists(filename))
+        .map(filename => fileNotFoundDiagnostic(filename));
+}
+
+// We need to mimic the behavior of tsc: Read arguments from the command line, but also, if none
+// were specified or if a project was specified with "--project" / "-p", then read tsconfig.json.
+function parseCommandLine(args: string[]): ts.ParsedCommandLine {
+    let pcl = ts.parseCommandLine(args);
+
+    // If there are no command line arguments, or if the user specified "--project" / "-p", then
+    // we need to read tsconfig.json
+    const configFileOrDirectory = (args.length > 0)
+        ? pcl.options.project
+        : ".";
+
+    if (configFileOrDirectory) {
+        if (pcl.fileNames.length > 0) {
+            pcl.errors.push({
+                file: undefined,
+                start: undefined,
+                length: undefined,
+                messageText: "Option 'project' cannot be mixed with source files on a command line.",
+                category: ts.DiagnosticCategory.Error,
+                code: 5042 // ugh, hard-coded
+            });
+            return pcl;
+        }
+
+        const configFileName: string = ts.sys.directoryExists(configFileOrDirectory)
+            ? path.join(configFileOrDirectory, "tsconfig.json")
+            : configFileOrDirectory;
+
+        if (!ts.sys.fileExists(configFileName)) {
+            pcl.errors.push(fileNotFoundDiagnostic(configFileName));;
+            return pcl;
+        }
+
+        const parseConfigHost = {
+            useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+            readDirectory: ts.sys.readDirectory,
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile
+        };
+
+        // Read and parse tsconfig.json, merging it with any other args from command line
+        pcl = ts.parseJsonConfigFileContent(
+            JSON.parse(ts.sys.readFile(configFileName)),
+            parseConfigHost,
+            ".",
+            pcl.options,
+            configFileName
+        );
+    }
+
+    return pcl;
+}
+
+function compile(args: string[]): { exitCode: number, output: string } {
     let exitCode = ts.ExitStatus.DiagnosticsPresent_OutputsSkipped;
     let output = "";
 
     try {
         let emitSkipped = true;
-        let diagnostics: ts.Diagnostic[] = [];
+        const diagnostics: ts.Diagnostic[] = [];
 
-        parsedCommandLine = ts.parseCommandLine(args);
+        parsedCommandLine = parseCommandLine(args);
+
         if (parsedCommandLine.errors.length > 0) {
-            diagnostics = parsedCommandLine.errors;
+            diagnostics.push(...parsedCommandLine.errors);
         } else if (parsedCommandLine.options.version) {
             output += `Version ${ts.version}\n`;
         } else {
-            // This call to languageService.getProgram() will clear out any modified SourceFiles
-            // from the compiler's cache.
-            const program = languageService.getProgram();
-            diagnostics = ts.getPreEmitDiagnostics(program);
+            diagnostics.push(...ensureRootFilesExist(parsedCommandLine.fileNames));
             if (diagnostics.length === 0) {
-                // We would like to use the TypeScript library's built-in writeFile function;
-                // the only way to get access to it is to call createCompilerHost().
-                const compilerHost = ts.createCompilerHost(parsedCommandLine.options);
+                // This call to languageService.getProgram() will clear out any modified SourceFiles
+                // from the compiler's cache.
+                const program = languageService.getProgram();
+                diagnostics.push(...ts.getPreEmitDiagnostics(program));
+                if (diagnostics.length === 0) {
+                    // We would like to use the TypeScript library's built-in writeFile function;
+                    // the only way to get access to it is to call createCompilerHost().
+                    const compilerHost = ts.createCompilerHost(parsedCommandLine.options);
 
-                // Write the compiled files to disk!
-                const emitOutput = program.emit(undefined /* all files */, compilerHost.writeFile);
+                    // Write the compiled files to disk!
+                    const emitOutput = program.emit(undefined /* all files */, compilerHost.writeFile);
 
-                diagnostics = emitOutput.diagnostics;
-                emitSkipped = emitOutput.emitSkipped;
+                    diagnostics.push(...emitOutput.diagnostics);
+                    emitSkipped = emitOutput.emitSkipped;
+                }
             }
         }
 
-        // const elapsedTime = process.hrtime(startTime);
-        // output += `Compilation time: ${(elapsedTime[0] + elapsedTime[1] / 1e9)}s${ts.sys.newLine}`;
         output += ts.formatDiagnostics(diagnostics, formatDiagnosticsHost);
-
-        // TODO: check for diagnostics and extendedDiagnostics flags
 
         if (emitSkipped) {
             exitCode = ts.ExitStatus.DiagnosticsPresent_OutputsSkipped;
@@ -131,21 +203,25 @@ function compile(args: string[]): { exitCode: number, output: string } {
     }
 };
 
+// Reads an unsigned varint32 from a protobuf-formatted array
 function readUnsignedVarint32(a: { [index: number]: number }): {
     value: number,  // the value of the varint32 that was read
     length: number  // the number of bytes that the encoded varint32 took
 } {
     let b: number;
-    let result: number;
+    let result = 0;
     let offset = 0;
 
-    do {
-        b = a[offset++]; result  = (b & 0x7F)         ; if (!(b & 0x80)) break;
-        b = a[offset++]; result |= (b & 0x7F) << (7*1); if (!(b & 0x80)) break;
-        b = a[offset++]; result |= (b & 0x7F) << (7*2); if (!(b & 0x80)) break;
-        b = a[offset++]; result |= (b & 0x7F) << (7*3); if (!(b & 0x80)) break;
-        b = a[offset++]; result |=  b         << (7*4); if (!(b & 0x80)) break;
-    } while (false); // i.e. only once
+    // Each byte has 7 bits of data, plus a high bit which indicates whether
+    // the value continues over into the next byte. A 32-bit value will never
+    // have more than 5 bytes of data (because 5 * 7 is obviously more than
+    // enough bits).
+    for (let i = 0; i < 5; i++) {
+        b = a[offset++];
+        result |= (b & 0x7F) << (7*i);
+        if (!(b & 0x80))
+            break;
+    }
 
     return { value: result, length: offset };
 }
@@ -204,8 +280,11 @@ function persistentWorker(exit: (exitCode: number) => void) {
 
         // Bazel wants the response to be preceded by a varint-encoded length
         const writer = new protobuf.BinaryWriter();
-        writer.encoder_.writeUnsignedVarint32(workResponseBytes.length);
-        const lengthArray: any = writer.encoder_.end(); // array
+        // TODO this is not cool, encoder_ is an undocumented internal property. But I haven't
+        // found another way to do what I want here.
+        const encoder_ = (<any>writer).encoder_;
+        encoder_.writeUnsignedVarint32(workResponseBytes.length);
+        const lengthArray: any = encoder_.end(); // array
 
         const buffer: Buffer = new Buffer(lengthArray.length + workResponseBytes.length);
         buffer.set(lengthArray); // the varint-encoded length...
@@ -218,35 +297,39 @@ function persistentWorker(exit: (exitCode: number) => void) {
     });
 }
 
-function main(argv: string[], exit: (exitCode: number) => void) {
+function main(args: string[], exit: (exitCode: number) => void) {
     // This is the flag that Bazel passes when it wants us to remain in memory as a persistent worker,
     // communicating with Bazel via protobuf over stdin/stdout.
-    if (argv.indexOf("--persistent_worker") !== -1) {
+    if (args.indexOf("--persistent_worker") !== -1) {
         persistentWorker(exit);
-    } else if (argv.indexOf("--debug") !== -1) {
+    } else if (args.indexOf("--debug") !== -1) {
         // Read regular text (not protobuf) from stdin; print to stdout
         const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
         });
+        rl.prompt();
 
         rl.on('line', (input: string) => {
+            const startTime = process.hrtime();
+
             const args = input.split(" ");
             const { exitCode, output } = compile(args);
-            process.stdout.write(`Exit code: ${exitCode}. Output:\n${output}`);
+
+            const elapsedTime = process.hrtime(startTime);
+            const elapsedMillis = Math.floor((elapsedTime[0] * 1e9 + elapsedTime[1]) / 1e6);
+            process.stdout.write(`Took ${elapsedMillis}ms. Exit code: ${exitCode}. Output:\n${output}`);
+            rl.prompt();
         });
         rl.on('close', () => {
             exit(0);
         });
     } else { // not --persistent_worker nor --debug; just a regular compile
-        const args = argv.slice(2);
         const { exitCode, output } = compile(args);
         if (output)
-            process.stdout.write(output); // TODO: stderr or stdout?
+            process.stdout.write(output);
         exit(exitCode);
     }
 }
 
-main(process.argv, process.exit);
-
-/* vim:set et ts=4 sw=4: */
+main(ts.sys.args, ts.sys.exit);
