@@ -36,7 +36,7 @@ const languageServiceHost: ts.LanguageServiceHost = {
             },
             getLength: () => text.length,
             getChangeRange: (oldSnapshot: ts.IScriptSnapshot): ts.TextChangeRange | undefined => {
-                let oldText = oldSnapshot.getText(0, oldSnapshot.getLength());
+                const oldText = oldSnapshot.getText(0, oldSnapshot.getLength());
 
                 // Find the offset of the first char that differs between oldText and text
                 let firstDiff = 0;
@@ -127,7 +127,7 @@ function parseCommandLine(args: string[]): ts.ParsedCommandLine {
             : configFileOrDirectory;
 
         if (!ts.sys.fileExists(configFileName)) {
-            pcl.errors.push(fileNotFoundDiagnostic(configFileName));;
+            pcl.errors.push( fileNotFoundDiagnostic(configFileName) );
             return pcl;
         }
 
@@ -198,10 +198,9 @@ function compile(args: string[]): { exitCode: number, output: string } {
     } catch (e) {
         exitCode = ts.ExitStatus.DiagnosticsPresent_OutputsSkipped;
         output = "" + e.stack;
-    } finally {
-        return { exitCode, output };
     }
-};
+    return { exitCode, output };
+}
 
 // Reads an unsigned varint32 from a protobuf-formatted array
 function readUnsignedVarint32(a: { [index: number]: number }): {
@@ -218,9 +217,10 @@ function readUnsignedVarint32(a: { [index: number]: number }): {
     // enough bits).
     for (let i = 0; i < 5; i++) {
         b = a[offset++];
-        result |= (b & 0x7F) << (7*i);
-        if (!(b & 0x80))
+        result |= (b & 0x7F) << (7 * i);
+        if (!(b & 0x80)) {
             break;
+        }
     }
 
     return { value: result, length: offset };
@@ -230,7 +230,7 @@ function persistentWorker(exit: (exitCode: number) => void) {
     let data: Buffer = null;
     let dataOffset = 0;
 
-    process.stdin.on('data', (chunk: Buffer) => {
+    process.stdin.on("data", (chunk: Buffer) => {
         if (data === null) {
             // This is the first chunk of data for a new WorkRequest. Each incoming
             // WorkRequest is preceded by its length, encoded as a Protobuf varint32.
@@ -282,7 +282,7 @@ function persistentWorker(exit: (exitCode: number) => void) {
         const writer = new protobuf.BinaryWriter();
         // TODO this is not cool, encoder_ is an undocumented internal property. But I haven't
         // found another way to do what I want here.
-        const encoder_ = (<any>writer).encoder_;
+        const encoder_ = (writer as any).encoder_;
         encoder_.writeUnsignedVarint32(workResponseBytes.length);
         const lengthArray: any = encoder_.end(); // array
 
@@ -292,7 +292,7 @@ function persistentWorker(exit: (exitCode: number) => void) {
         process.stdout.write(new Buffer(buffer));
     });
 
-    process.stdin.on('end', () => {
+    process.stdin.on("end", () => {
         exit(0);
     });
 }
@@ -310,24 +310,25 @@ function main(args: string[], exit: (exitCode: number) => void) {
         });
         rl.prompt();
 
-        rl.on('line', (input: string) => {
+        rl.on("line", (input: string) => {
             const startTime = process.hrtime();
 
-            const args = input.split(" ");
-            const { exitCode, output } = compile(args);
+            const cmdArgs = input.split(" ");
+            const { exitCode, output } = compile(cmdArgs);
 
             const elapsedTime = process.hrtime(startTime);
             const elapsedMillis = Math.floor((elapsedTime[0] * 1e9 + elapsedTime[1]) / 1e6);
             process.stdout.write(`Took ${elapsedMillis}ms. Exit code: ${exitCode}. Output:\n${output}`);
             rl.prompt();
         });
-        rl.on('close', () => {
+        rl.on("close", () => {
             exit(0);
         });
     } else { // not --persistent_worker nor --debug; just a regular compile
         const { exitCode, output } = compile(args);
-        if (output)
+        if (output) {
             process.stdout.write(output);
+        }
         exit(exitCode);
     }
 }

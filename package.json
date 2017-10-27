@@ -34,6 +34,7 @@
     "@types/node": "^7.0.12",
     "google-protobuf": "^3.2.7",
     "ts-protoc-gen": "^0.4.0",
+    "tslint": "^5.8.0",
     "typescript": "^2.5.3",
     "webpack": "^3.6.0"
   }
