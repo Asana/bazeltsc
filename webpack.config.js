@@ -25,9 +25,13 @@ module.exports = {
     'typescript': `(function() {
       const fs = require("fs");
       const path = require("path");
-      const typescriptProxy = path.join(process.cwd(), "typescript_proxy.js");
+      const crypto = require("crypto");
+      const pseudorand = crypto.randomBytes(4).readUInt32LE(0);
+      const typescriptProxy = path.join(process.cwd(), "typescript_proxy_" + pseudorand + ".js");
       fs.writeFileSync(typescriptProxy, 'module.exports = require("typescript");');
-      return require(typescriptProxy);
+      const typescript = require(typescriptProxy);
+      fs.unlinkSync(typescriptProxy);
+      return typescript;
     })()`
   }
 }
