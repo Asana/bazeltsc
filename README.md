@@ -14,60 +14,73 @@ performance benefits:
    file, lib.d.ts, will only be read once; any any other .ts or .d.ts files
    will also only be read once.
 
-## To clone this repo:
+In our internal usage at Asana, using bazeltsc has led to roughly a 2x to 4x
+speedup in TypeScript compilation (the numbers are affected by a variety of
+factors).
 
-For now, **you must have bazeltsc be a sibling of CODEZ**. Typically, you will
-have CODEZ in `~/sandbox/asana`; in that case, bazeltsc will be in
-`~/sandbox/bazeltsc`. This will change in the future. More on this in the
-section below on using bazeltsc with CODEZ.
+## Installation
 
-## To build:
+You will need to get bazeltsc into a place where Bazel can find it. One way to
+do this is by using Bazel's
+[`rules_nodejs`](https://github.com/bazelbuild/rules_nodejs); but you can do it
+any way you like.
 
-    npm run build
+Instructions if you are using `rules_nodejs`:
 
-## To run:
+*   Follow the [`rules_nodejs`](https://github.com/bazelbuild/rules_nodejs)
+    setup instructions.
 
-### A regular compile:
+*   Add `bazeltsc` to your `package.json`:
 
-    $ bin/bazeltsc [tsc-args] foo.ts ...
+        npm install --save-dev bazeltsc
 
-### This is how Bazel invokes it as a peristent worker:
+*   Run the Bazel equivalent of `npm install`:
 
-    $ bin/bazeltsc --persistent_worker
+        bazel run @nodejs//:npm install
 
-From that point on, Bazel sends protobuf-encoded messages to bazeltsc on stdin
-(protobuf WorkRequest), and bazeltsc responds with protobuf-encoded messages
-on stdout (protobuf WorkResponse). 
+*   Copy `tsc.bzl` from `node_modules/bazeltsc/tsc.bzl` into your repo
+    somewhere.  (We intend to clean this up as soon as we figure out how to get
+    Bazel to be able to find `tsc.bzl` directly from inside `node_modules`.)
 
-### To manually test multiple-compile capability:
+*   Use the example from the `example` directory -- especially the `WORKSPACE`
+    and `BUILD` file -- to finish setting things up.
 
-    $ bin/bazeltsc --debug
+## Experimenting with bazeltsc
 
-From that point on, type one set of tsc arguments at the prompt; it will do a
-compile, and then display the compiler output.
+Normally, you just let Bazel launch bazeltsc. But it is helpful to understand
+how bazeltsc is launched by Bazel, and how you can experiment with it yourself.
 
-    $ bin/bazeltsc --debug
-    --noImplicitAny --outFile out.js foo.ts bar.ts
+bazeltsc can run in any of three modes:
 
-### To use it with CODEZ:
+*   **As a bazel persistent worker.**  Bazel will launch it with this command line: 
 
-This is a temporary solution -- obviously this will change. The way this works
-is that `bazeltsc/dist` is actually a symlink that points into the CODEZ
-source tree, so when you build `bazeltsc`, the binary ends up in a place where
-CODEZ can find it and use it.
+        bazeltsc --persistent_worker
 
-So if you modify bazeltsc and rebuild it, then you will notice that the target
-files in your CODEZ repo have changed; you can then commit them if that is your
-intent.
+    At that point, bazeltsc is reading protobuf-formatted compilation requests
+    from stdin; compiling; and returning protobuf-formatted results on stdout.
 
-#### Steps to update CODEZ to use a new version of bazeltsc:
+*   **As a thin wrapper around tsc.**  Examples:
 
-1.  As described above, clone bazeltsc as a sibling of CODEZ:
+        bazeltsc --outDir target foo.ts bar.ts
+        bazeltsc @argfile
 
-        $ cd $CODEZ/..
-        $ git clone git@github.com:Asana/bazeltsc.git
+    This provides no functionality beyond what tsc itself provides; it is
+    supported in case, for whatever reason, there are times when you want to
+    tell Bazel not to use persistent workers.
 
-2.  Edit bazeltsc sources as desired.
-3.  Recompile bazeltsc with `tsc`. This will update the binaries in CODEZ.
-4.  Test your changes by rebuilding CODEZ
-5.  Commit the changes in BOTH the bazeltsc repo AND the CODEZ repo.
+*   **In "debug" mode.** If you want to experiment interactively with bazeltsc,
+    run it like this:
+
+        bazeltsc --debug
+
+    Then, at the `>` prompt, enter a full tsc command line. This will let you
+    see the speed difference between an initial compilation and a subsequent
+    one.
+
+    For example:
+
+        bazeltsc --debug
+        > x.ts
+        Compilation took 890ms. Exit code: 0.
+        > x.ts
+        Compilation took 351ms. Exit code: 0.

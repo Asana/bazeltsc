@@ -318,7 +318,13 @@ function main(args: string[], exit: (exitCode: number) => void) {
 
             const elapsedTime = process.hrtime(startTime);
             const elapsedMillis = Math.floor((elapsedTime[0] * 1e9 + elapsedTime[1]) / 1e6);
-            process.stdout.write(`Took ${elapsedMillis}ms. Exit code: ${exitCode}. Output:\n${output}`);
+            let message = `Compilation took ${elapsedMillis}ms. Exit code: ${exitCode}.`;
+            if (output) {
+                message += ` Compiler output:\n${output}`;
+            } else {
+                message += "\n";
+            }
+            process.stdout.write(message);
             rl.prompt();
         });
         rl.on("close", () => {

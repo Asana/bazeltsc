@@ -15,7 +15,8 @@
   },
   "files": [
     "bin/*",
-    "dist/*"
+    "dist/*",
+    "tsc.bzl"
   ],
   "repository": "Asana/bazel-tsc",
   "scripts": {
@@ -25,7 +26,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Mike Morearty (https://github.com/mmorearty)",
-  "license": "BSD-3-Clause",
+  "license": "MIT",
   "peerDependencies": {
     "typescript": ">= 2.0.2"
   },
