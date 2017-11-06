@@ -1,0 +1,16 @@
+{
+  "name": "btsctest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Mike Morearty (https://github.com/mmorearty)",
+  "license": "ISC",
+  "devDependencies": {
+    "bazeltsc": "1.0.0",
+    "typescript": "^2.6.1"
+  }
+}
