@@ -45,6 +45,17 @@ Instructions if you are using `rules_nodejs`:
 *   Use the example from the `example` directory -- especially the `WORKSPACE`
     and `BUILD` file -- to finish setting things up.
 
+*   It is essential that when you run Bazel, you invoke it with
+    `--strategy=TsCompile=worker`. This is what tells Bazel to use `bazeltsc`
+    as a persistent worker instead of as a regular tool that is invoked once
+    per compilation.
+
+    You will probably want to add that to a `.bazelrc` file in the root directory
+    of your project, so that you don't have to specify it on the command line:
+
+        # This will be used every time someone does `bazel build ...`:
+        build --strategy=TsCompile=worker
+
 ## Experimenting with bazeltsc
 
 Normally, you just let Bazel launch bazeltsc. But it is helpful to understand
