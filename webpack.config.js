@@ -3,7 +3,7 @@ const webpack = require('webpack');
 module.exports = {
   entry: './lib/bazeltsc.js',
   output: {
-    filename: 'dist/bazeltsc.js'
+    filename: 'bazeltsc.js'
   },
   target: 'node',
   externals: {
