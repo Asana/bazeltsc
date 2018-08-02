@@ -7,11 +7,19 @@ import * as readline from "readline";
 // imported npm packages
 import * as ts from "typescript";
 import * as protobuf from "google-protobuf";
+import * as minimist from "minimist";
 
 // imports of our own code
 import * as worker from "../lib/worker_protocol_pb";
 
+interface Args {
+    max_compiles: number;        // e.g. --max_compiles=10
+    persistent_worker?: boolean; // Bazel passes --persistent_worker
+    debug?: boolean;             // --debug lets you run this interactively
+}
+
 let parsedCommandLine: ts.ParsedCommandLine;
+let maxCompiles: number; // 0 means no limit
 
 const languageServiceHost: ts.LanguageServiceHost = {
     getCompilationSettings: (): ts.CompilerOptions => parsedCommandLine.options,
@@ -71,13 +79,33 @@ const languageServiceHost: ts.LanguageServiceHost = {
     getDefaultLibFileName: ts.getDefaultLibFilePath
 };
 
-const languageService: ts.LanguageService = ts.createLanguageService(languageServiceHost);
-
 const formatDiagnosticsHost: ts.FormatDiagnosticsHost = {
     getCurrentDirectory: ts.sys.getCurrentDirectory,
     getCanonicalFileName: (fileName: string) => fileName,
     getNewLine: () => ts.sys.newLine
 };
+
+class LanguageServiceProvider {
+    private _languageService: ts.LanguageService = ts.createLanguageService(languageServiceHost);
+    private _count = 0;
+
+    // Every N compiles, this will release the current TypeScript LanguageService, create a new
+    // one, and do a gc(). N defaults to 10, and is overridden with --max_compiles=N
+    acquire() {
+        if (!this._languageService || (maxCompiles && this._count >= maxCompiles)) {
+            this._languageService = ts.createLanguageService(languageServiceHost);
+            this._count = 0;
+            if (global.gc) {
+                global.gc();
+            }
+        }
+
+        ++this._count;
+        return this._languageService;
+    }
+}
+
+const languageServiceProvider = new LanguageServiceProvider();
 
 function fileNotFoundDiagnostic(filename: string): ts.Diagnostic {
     return {
@@ -168,6 +196,7 @@ function compile(args: string[]): { exitCode: number, output: string } {
         } else {
             diagnostics.push(...ensureRootFilesExist(parsedCommandLine.fileNames));
             if (diagnostics.length === 0) {
+                const languageService = languageServiceProvider.acquire();
                 // This call to languageService.getProgram() will clear out any modified SourceFiles
                 // from the compiler's cache.
                 const program = languageService.getProgram();
@@ -298,11 +327,18 @@ function persistentWorker(exit: (exitCode: number) => void) {
 }
 
 function main(args: string[], exit: (exitCode: number) => void) {
+    const argv = {
+        max_compiles: 10,  // default, can be overridden with --max_compiles=N
+        ...minimist<Args>(args)
+    };
+
+    maxCompiles = argv.max_compiles;
+
     // This is the flag that Bazel passes when it wants us to remain in memory as a persistent worker,
     // communicating with Bazel via protobuf over stdin/stdout.
-    if (args.indexOf("--persistent_worker") !== -1) {
+    if (argv["persistent_worker"]) {
         persistentWorker(exit);
-    } else if (args.indexOf("--debug") !== -1) {
+    } else if (argv["debug"]) {
         // Read regular text (not protobuf) from stdin; print to stdout
         const rl = readline.createInterface({
             input: process.stdin,

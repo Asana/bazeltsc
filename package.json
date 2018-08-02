@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@types/google-protobuf": "^3.2.7",
+    "@types/minimist": "^1.2.0",
     "@types/node": "^10.5.3",
     "google-protobuf": "^3.6.0",
     "ts-protoc-gen": "^0.7.6",
@@ -39,5 +40,8 @@
     "typescript": "^2.9.2",
     "webpack": "^4.16.2",
     "webpack-command": "^0.4.1"
+  },
+  "dependencies": {
+    "minimist": "^1.2.0"
   }
 }
