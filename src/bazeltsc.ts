@@ -12,14 +12,20 @@ import * as minimist from "minimist";
 // imports of our own code
 import * as worker from "../lib/worker_protocol_pb";
 
-interface Args {
-    max_compiles: number;        // e.g. --max_compiles=10
+interface Settings extends minimist.ParsedArgs {
+    max_compiles: number;        // e.g. --max_compiles=10; 0 means no limit
+    max_idle_seconds: number;    // e.g. --max_idle_seconds=5; 0 means no limit
     persistent_worker?: boolean; // Bazel passes --persistent_worker
     debug?: boolean;             // --debug lets you run this interactively
 }
 
+let settings: Settings = {
+    max_compiles: 10,
+    max_idle_seconds: 5,
+    _: []
+};
+
 let parsedCommandLine: ts.ParsedCommandLine;
-let maxCompiles: number; // 0 means no limit
 
 const languageServiceHost: ts.LanguageServiceHost = {
     getCompilationSettings: (): ts.CompilerOptions => parsedCommandLine.options,
@@ -86,22 +92,60 @@ const formatDiagnosticsHost: ts.FormatDiagnosticsHost = {
 };
 
 class LanguageServiceProvider {
-    private _languageService: ts.LanguageService = ts.createLanguageService(languageServiceHost);
+    private _languageService: ts.LanguageService;
     private _count = 0;
+    private _idleTimer: NodeJS.Timer;
 
     // Every N compiles, this will release the current TypeScript LanguageService, create a new
     // one, and do a gc(). N defaults to 10, and is overridden with --max_compiles=N
     acquire() {
-        if (!this._languageService || (maxCompiles && this._count >= maxCompiles)) {
+        this._clearIdleTimeout();
+        if (!this._languageService) {
             this._languageService = ts.createLanguageService(languageServiceHost);
             this._count = 0;
-            if (global.gc) {
-                global.gc();
-            }
         }
 
         ++this._count;
         return this._languageService;
+    }
+
+    release() {
+        if (this._languageService) {
+            if (this._count >= settings.max_compiles) {
+                // We've hit our limit on how many compiles we will do with a single
+                // LanguageService. So free up the current one and do a gc().
+                this._freeMemory();
+            } else {
+                // If Bazel doesn't send any more work requests for a while, we will
+                // free memory.
+                this._setIdleTimeout();
+            }
+        }
+    }
+
+    private _setIdleTimeout() {
+        if (settings.max_idle_seconds) {
+            this._idleTimer = setTimeout(this._onIdle, settings.max_idle_seconds * 1000);
+        }
+    }
+
+    private _clearIdleTimeout() {
+        if (this._idleTimer) {
+            clearTimeout(this._idleTimer);
+            this._idleTimer = null;
+        }
+    }
+
+    private _onIdle = () => {
+        this._idleTimer = null;
+        this._freeMemory();
+    };
+
+    private _freeMemory() {
+        this._languageService = null;
+        if (global.gc) {
+            global.gc();
+        }
     }
 }
 
@@ -196,21 +240,26 @@ function compile(args: string[]): { exitCode: number, output: string } {
         } else {
             diagnostics.push(...ensureRootFilesExist(parsedCommandLine.fileNames));
             if (diagnostics.length === 0) {
-                const languageService = languageServiceProvider.acquire();
-                // This call to languageService.getProgram() will clear out any modified SourceFiles
-                // from the compiler's cache.
-                const program = languageService.getProgram();
-                diagnostics.push(...ts.getPreEmitDiagnostics(program));
-                if (diagnostics.length === 0) {
-                    // We would like to use the TypeScript library's built-in writeFile function;
-                    // the only way to get access to it is to call createCompilerHost().
-                    const compilerHost = ts.createCompilerHost(parsedCommandLine.options);
+                let languageService: ts.LanguageService;
+                try {
+                    languageService = languageServiceProvider.acquire();
+                    // This call to languageService.getProgram() will clear out any modified SourceFiles
+                    // from the compiler's cache.
+                    const program = languageService.getProgram();
+                    diagnostics.push(...ts.getPreEmitDiagnostics(program));
+                    if (diagnostics.length === 0) {
+                        // We would like to use the TypeScript library's built-in writeFile function;
+                        // the only way to get access to it is to call createCompilerHost().
+                        const compilerHost = ts.createCompilerHost(parsedCommandLine.options);
 
-                    // Write the compiled files to disk!
-                    const emitOutput = program.emit(undefined /* all files */, compilerHost.writeFile);
+                        // Write the compiled files to disk!
+                        const emitOutput = program.emit(undefined /* all files */, compilerHost.writeFile);
 
-                    diagnostics.push(...emitOutput.diagnostics);
-                    emitSkipped = emitOutput.emitSkipped;
+                        diagnostics.push(...emitOutput.diagnostics);
+                        emitSkipped = emitOutput.emitSkipped;
+                    }
+                } finally {
+                    languageServiceProvider.release();
                 }
             }
         }
@@ -327,18 +376,16 @@ function persistentWorker(exit: (exitCode: number) => void) {
 }
 
 function main(args: string[], exit: (exitCode: number) => void) {
-    const argv = {
-        max_compiles: 10,  // default, can be overridden with --max_compiles=N
-        ...minimist<Args>(args)
+    settings = {
+        ...settings,
+        ...minimist<Settings>(args)
     };
-
-    maxCompiles = argv.max_compiles;
 
     // This is the flag that Bazel passes when it wants us to remain in memory as a persistent worker,
     // communicating with Bazel via protobuf over stdin/stdout.
-    if (argv["persistent_worker"]) {
+    if (settings["persistent_worker"]) {
         persistentWorker(exit);
-    } else if (argv["debug"]) {
+    } else if (settings["debug"]) {
         // Read regular text (not protobuf) from stdin; print to stdout
         const rl = readline.createInterface({
             input: process.stdin,
