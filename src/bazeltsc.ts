@@ -111,7 +111,7 @@ class LanguageServiceProvider {
 
     release() {
         if (this._languageService) {
-            if (this._count >= settings.max_compiles) {
+            if (settings.max_compiles && this._count >= settings.max_compiles) {
                 // We've hit our limit on how many compiles we will do with a single
                 // LanguageService. So free up the current one and do a gc().
                 this._freeMemory();
