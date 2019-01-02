@@ -20,8 +20,8 @@ interface Settings extends minimist.ParsedArgs {
 }
 
 let settings: Settings = {
-    max_compiles: 10,
-    max_idle_seconds: 5,
+    max_compiles: 0,
+    max_idle_seconds: 0,
     _: []
 };
 
