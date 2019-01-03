@@ -20,7 +20,7 @@ interface Settings extends minimist.ParsedArgs {
 }
 
 let settings: Settings = {
-    max_compiles: 0,
+    max_compiles: 1,
     max_idle_seconds: 0,
     _: []
 };
@@ -146,6 +146,7 @@ class LanguageServiceProvider {
         if (global.gc) {
             global.gc();
         }
+        console.log(">>>after gc: heapUsed = " + process.memoryUsage().heapUsed);
     }
 }
 
