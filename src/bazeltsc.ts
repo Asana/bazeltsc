@@ -119,10 +119,10 @@ class LanguageServiceProvider {
                 // If Bazel doesn't send any more work requests for a while, we will
                 // free memory.
                 this._setIdleTimeout();
-                return "";
+                return ">>>did not gc (1)";
             }
         } else {
-            return "";
+            return ">>>did not gc (2)";
         }
     }
 
