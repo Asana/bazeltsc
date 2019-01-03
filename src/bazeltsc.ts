@@ -109,17 +109,20 @@ class LanguageServiceProvider {
         return this._languageService;
     }
 
-    release() {
+    release(): string {
         if (this._languageService) {
             if (settings.max_compiles && this._count >= settings.max_compiles) {
                 // We've hit our limit on how many compiles we will do with a single
                 // LanguageService. So free up the current one and do a gc().
-                this._freeMemory();
+                return this._freeMemory();
             } else {
                 // If Bazel doesn't send any more work requests for a while, we will
                 // free memory.
                 this._setIdleTimeout();
+                return "";
             }
+        } else {
+            return "";
         }
     }
 
@@ -141,12 +144,12 @@ class LanguageServiceProvider {
         this._freeMemory();
     };
 
-    private _freeMemory() {
+    private _freeMemory(): string {
         this._languageService = null;
         if (global.gc) {
             global.gc();
         }
-        console.log(">>>after gc: heapUsed = " + process.memoryUsage().heapUsed);
+        return ">>>after gc: heapUsed = " + process.memoryUsage().heapUsed + "\n";
     }
 }
 
@@ -260,7 +263,7 @@ function compile(args: string[]): { exitCode: number, output: string } {
                         emitSkipped = emitOutput.emitSkipped;
                     }
                 } finally {
-                    languageServiceProvider.release();
+                    output += languageServiceProvider.release();
                 }
             }
         }
