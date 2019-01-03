@@ -95,6 +95,7 @@ class LanguageServiceProvider {
     private _languageService: ts.LanguageService;
     private _count = 0;
     private _idleTimer: NodeJS.Timer;
+    private _acquiredAtMillis = 0;
 
     // Every N compiles, this will release the current TypeScript LanguageService, create a new
     // one, and do a gc(). N defaults to 10, and is overridden with --max_compiles=N
@@ -106,23 +107,26 @@ class LanguageServiceProvider {
         }
 
         ++this._count;
+        this._acquiredAtMillis = new Date().getTime();
         return this._languageService;
     }
 
-    release(): string {
+    release(message: string): string {
+        const elapsedMillis = (new Date().getTime()) - this._acquiredAtMillis;
+        this._acquiredAtMillis = 0;
         if (this._languageService) {
             if (settings.max_compiles && this._count >= settings.max_compiles) {
                 // We've hit our limit on how many compiles we will do with a single
                 // LanguageService. So free up the current one and do a gc().
-                return this._freeMemory();
+                return `>>>${message}: ` + this._freeMemory() + `, elapsed: ${elapsedMillis}\n`;
             } else {
                 // If Bazel doesn't send any more work requests for a while, we will
                 // free memory.
                 this._setIdleTimeout();
-                return ">>>did not gc (1)";
+                return `>>>${message}: did not gc (1), elapsed: ${elapsedMillis}\n`;
             }
         } else {
-            return ">>>did not gc (2)";
+            return `>>>${message}: did not gc (2), elapsed: ${elapsedMillis}\n`;
         }
     }
 
@@ -152,9 +156,9 @@ class LanguageServiceProvider {
                 global.gc();
             }
             const heapAfter = process.memoryUsage().heapUsed;
-            return `>>>heapUsed = ${heapBefore}, after gc: heapUsed = ${heapAfter}\n`;
+            return `>>>heapUsed = ${heapBefore}, after gc: heapUsed = ${heapAfter}`;
         } else {
-            return `>>>heapUsed = ${heapBefore}, so no gc\n`;
+            return `>>>heapUsed = ${heapBefore}, so no gc`;
         }
     }
 }
@@ -269,7 +273,7 @@ function compile(args: string[]): { exitCode: number, output: string } {
                         emitSkipped = emitOutput.emitSkipped;
                     }
                 } finally {
-                    output += languageServiceProvider.release();
+                    output += languageServiceProvider.release(parsedCommandLine.fileNames[0] || "");
                 }
             }
         }
