@@ -145,11 +145,13 @@ class LanguageServiceProvider {
     };
 
     private _freeMemory(): string {
+        const heapBefore = process.memoryUsage().heapUsed;
         this._languageService = null;
         if (global.gc) {
             global.gc();
         }
-        return ">>>after gc: heapUsed = " + process.memoryUsage().heapUsed + "\n";
+        const heapAfter = process.memoryUsage().heapUsed;
+        return `>>>before gc: heapUsed = ${heapBefore}, after gc: heapUsed = ${heapAfter}\n`;
     }
 }
 
