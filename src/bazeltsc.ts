@@ -203,20 +203,22 @@ function parseCommandLine(args: string[]): ts.ParsedCommandLine {
             return pcl;
         }
 
-        const parseConfigHost = {
+        const parseConfigFileHost: ts.ParseConfigFileHost = {
             useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
             readDirectory: ts.sys.readDirectory,
             fileExists: ts.sys.fileExists,
-            readFile: ts.sys.readFile
+            readFile: ts.sys.readFile,
+            getCurrentDirectory: ts.sys.getCurrentDirectory,
+            onUnRecoverableConfigFileDiagnostic: diagnostic => {
+                pcl.errors.push(diagnostic);
+            }
         };
 
         // Read and parse tsconfig.json, merging it with any other args from command line
-        pcl = ts.parseJsonConfigFileContent(
-            JSON.parse(ts.sys.readFile(configFileName)),
-            parseConfigHost,
-            ".",
+        pcl = ts.getParsedCommandLineOfConfigFile(
+            configFileName,
             pcl.options,
-            configFileName
+            parseConfigFileHost
         );
     }
 
